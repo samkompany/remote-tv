@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart TV Remote</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<script src="https://unpkg.com/lucide@0.468.0"></script>
+<style>
+  :root {
+    --accent: #3b82f6;
+    --accent-2: #22d3ee;
+    --shell: #141418;
+    --key: #2a2a32;
+    --key-hi: #35353f;
+  }
+  * { font-family: 'Outfit', system-ui, sans-serif; }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(59, 130, 246, 0.22), transparent 55%),
+      radial-gradient(ellipse 50% 40% at 100% 100%, rgba(34, 211, 238, 0.12), transparent 45%),
+      linear-gradient(165deg, #0b0b0e 0%, #12141a 45%, #0e0e12 100%);
+  }
+  .remote-shell {
+    background: linear-gradient(160deg, #222228 0%, var(--shell) 35%, #0f0f12 100%);
+    box-shadow: 0 30px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.08), inset 0 -2px 8px rgba(0,0,0,.45);
+  }
+  .key {
+    background: linear-gradient(180deg, var(--key-hi), var(--key));
+    box-shadow: 0 4px 0 #111, 0 6px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.1);
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .key:active, .key.is-down { transform: translateY(3px); box-shadow: 0 1px 0 #111, 0 2px 6px rgba(0,0,0,.4); }
+  .key-accent {
+    background: linear-gradient(180deg, #60a5fa, var(--accent));
+    box-shadow: 0 4px 0 #1e40af, 0 6px 14px rgba(59,130,246,.35), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .key-accent:active { box-shadow: 0 1px 0 #1e40af; }
+  .key-power {
+    background: linear-gradient(180deg, #ff5a5f, #e11d48);
+    box-shadow: 0 4px 0 #9f1239, 0 6px 14px rgba(225,29,72,.35), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .ok-btn {
+    background: radial-gradient(circle at 35% 30%, #67e8f9, var(--accent) 55%, #1d4ed8);
+    box-shadow: 0 5px 0 #1e3a8a, 0 8px 18px rgba(59,130,246,.4), inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .ok-btn:active { transform: translateY(3px); }
+  .dpad {
+    background: radial-gradient(circle at 50% 45%, #2e2e36, #1a1a20 70%);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.06), 0 10px 24px rgba(0,0,0,.45);
+  }
+  .app-chip {
+    background: #1a1a20;
+    border: 1px solid rgba(255,255,255,.06);
+    box-shadow: 0 3px 0 #0a0a0c, 0 6px 14px rgba(0,0,0,.3);
+  }
+  .app-chip:active { transform: translateY(2px); box-shadow: 0 1px 0 #0a0a0c; }
+  .mic-live {
+    background: linear-gradient(180deg, #fb7185, #e11d48) !important;
+    box-shadow: 0 0 0 6px rgba(225,29,72,.2), 0 8px 24px rgba(225,29,72,.45) !important;
+    animation: micPulse 1s ease-in-out infinite;
+  }
+  @keyframes micPulse {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(225,29,72,.15), 0 8px 20px rgba(225,29,72,.35); }
+    50% { box-shadow: 0 0 0 10px rgba(225,29,72,.08), 0 8px 28px rgba(225,29,72,.5); }
+  }
+  .pulse-dot { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: .45; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.15); }
+  }
+  .setup-panel input { background: #121218; border: 1px solid rgba(255,255,255,.08); }
+  [x-cloak] { display: none !important; }
+</style>
+</head>
+<body class="text-white min-h-screen flex items-center justify-center p-4" x-data="remote()" x-init="init()" @keydown.window="onKey($event)">
+<div class="w-full max-w-[360px]">
+
+  <div x-show="st.status!=='ready'" class="space-y-4" x-cloak>
+    <div class="text-center mb-2">
+      <p class="text-sm font-extrabold tracking-[0.22em] uppercase text-sky-400">Universal</p>
+      <h1 class="text-3xl font-extrabold tracking-tight">Smart TV Remote</h1>
+      <p class="text-sm text-white/45 mt-1">Android · Google TV · Roku · Itel · TCL…</p>
+    </div>
+
+    <div x-show="st.status==='idle'" class="remote-shell rounded-[2rem] p-5 space-y-3 setup-panel">
+      <button @click="scan()" class="key key-accent w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2">
+        <i data-lucide="radar" class="w-5 h-5"></i>
+        <span x-text="scanning ? 'Recherche Wi‑Fi…' : 'Rechercher (Wi‑Fi / mDNS)'"></span>
+      </button>
+      <button @click="scanBt()" class="key w-full rounded-2xl py-3 font-semibold flex items-center justify-center gap-2">
+        <i data-lucide="bluetooth" class="w-5 h-5 text-sky-300"></i>
+        <span x-text="scanningBt ? 'Scan Bluetooth…' : 'Trouver la télé (Bluetooth)'"></span>
+      </button>
+      <button @click="becomeAccessory()" class="key w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 border border-sky-500/40">
+        <i data-lucide="smartphone" class="w-5 h-5 text-sky-300"></i>
+        <span x-text="btBusy ? 'Préparation accessoire…' : '1. Activer accessoire Bluetooth'"></span>
+      </button>
+      <button @click="pairClassic()" class="key key-accent w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2">
+        <i data-lucide="bluetooth-connected" class="w-5 h-5"></i>
+        <span x-text="btPairing ? 'Fenêtre Mac ouverte…' : '2. Appairer la télé (Bluetooth)'"></span>
+      </button>
+      <p class="text-[11px] text-sky-200/70 leading-relaxed">
+        La télé ne voit souvent pas le BLE seul. Laisse-la sur <span class="text-white">Ajouter un accessoire</span>,
+        puis clique le bouton 2 et <span class="text-white">choisis la télé dans la fenêtre Mac</span>. Ensuite tu peux couper le Wi‑Fi.
+      </p>
+
+      <template x-for="d in devices" :key="(d.host || d.btAddress || '') + (d.type||'')">
+        <div class="flex gap-2">
+          <button @click="connectDevice(d)" class="key flex-1 rounded-2xl py-3 px-4 text-left" :disabled="!d.host">
+            <div class="font-semibold flex items-center gap-2">
+              <span x-text="d.name"></span>
+              <span x-show="d.transport?.includes('bluetooth')" class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">BT</span>
+            </div>
+            <div class="text-[11px] text-sky-300/80" x-text="d.platform || d.type"></div>
+            <div class="text-xs text-white/35" x-text="d.host ? d.host : ('BT ' + (d.btAddress || ''))"></div>
+          </button>
+          <button x-show="d.host && d.type!=='roku'" @click="connect(d.host, true)" class="key rounded-2xl px-3 text-xs text-emerald-300">ADB</button>
+        </div>
+      </template>
+
+      <div class="flex gap-2">
+        <input x-model="manualIp" placeholder="IP de la télé" class="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none">
+        <button @click="connect(manualIp)" class="key rounded-xl px-4 font-semibold">OK</button>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <button @click="connect(manualIp, true)" class="key rounded-xl py-2.5 text-xs">ADB</button>
+        <button @click="connect(manualIp, false, 'roku')" class="key rounded-xl py-2.5 text-xs">Roku</button>
+        <button @click="becomeAccessory()" class="key rounded-xl py-2.5 text-xs text-sky-300">Accessoire BT</button>
+      </div>
+      <pre class="text-[11px] text-sky-100/80 whitespace-pre-wrap font-sans leading-relaxed bg-sky-500/10 rounded-xl p-3" x-show="btNote" x-text="btNote"></pre>
+
+      <details class="rounded-xl bg-black/25 p-3">
+        <summary class="text-sm text-white/70 cursor-pointer">Appairage débogage sans fil</summary>
+        <div class="mt-3 space-y-2">
+          <input x-model="pairHost" placeholder="IP" class="w-full rounded-lg px-3 py-2 text-sm">
+          <div class="flex gap-2">
+            <input x-model="pairPort" placeholder="Port appairage" class="w-1/2 rounded-lg px-3 py-2 text-sm">
+            <input x-model="pairCode" placeholder="Code" class="w-1/2 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <input x-model="connectPort" placeholder="Port connexion" class="w-full rounded-lg px-3 py-2 text-sm">
+          <button @click="pairAdb()" class="key w-full rounded-xl py-2.5 text-sm">Appairer</button>
+        </div>
+      </details>
+
+      <pre class="text-sm text-rose-300/90 whitespace-pre-wrap font-sans leading-relaxed" x-text="st.error"></pre>
+    </div>
+
+    <div x-show="st.status==='connecting'" class="remote-shell rounded-[2rem] p-8 text-center space-y-4">
+      <div class="mx-auto w-3 h-3 rounded-full bg-sky-400 pulse-dot"></div>
+      <p class="text-white/70">Connexion à <span class="text-white font-semibold" x-text="st.host"></span></p>
+      <button @click="cancel()" class="key rounded-xl px-6 py-2.5 text-sm">Annuler</button>
+    </div>
+
+    <div x-show="st.status==='waiting_code'" class="remote-shell rounded-[2rem] p-5 space-y-3">
+      <p class="text-sm text-white/70">Code affiché sur la télé</p>
+      <input x-model="code" maxlength="6" class="w-full rounded-xl px-3 py-4 text-center text-2xl tracking-[0.35em] uppercase outline-none">
+      <button @click="sendCode()" class="key key-accent w-full rounded-2xl py-3 font-semibold">Valider</button>
+      <button @click="cancel()" class="key w-full rounded-xl py-2.5 text-sm">Annuler</button>
+    </div>
+  </div>
+
+  <!-- Remote -->
+  <div x-show="st.status==='ready'" x-cloak class="remote-shell rounded-[2.4rem] p-5 pt-6 space-y-4 relative overflow-hidden">
+    <div class="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-sky-500/10 to-transparent pointer-events-none"></div>
+
+    <div class="relative flex items-center justify-between px-1">
+      <div>
+        <p class="text-[11px] font-extrabold uppercase tracking-[0.22em] text-sky-400">Smart Remote</p>
+        <p class="text-xs text-white/70 font-medium" x-text="tvTitle"></p>
+        <p class="text-[11px] text-white/35 flex items-center gap-1.5 mt-0.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
+          <span x-text="(st.mode || '') + ' · ' + (st.host || '')"></span>
+        </p>
+      </div>
+      <button @click="cancel()" class="key w-10 h-10 rounded-full flex items-center justify-center">
+        <i data-lucide="unlink" class="w-4 h-4 text-white/60"></i>
+      </button>
+    </div>
+
+    <!-- Menus TV (Image / Son / Source…) -->
+    <div class="relative">
+      <p class="text-[10px] uppercase tracking-[0.2em] text-white/35 mb-2 px-1">Menus TV</p>
+      <div class="grid grid-cols-5 gap-2">
+        <button @click="tvAction('menu')" class="app-chip rounded-xl py-2.5 flex flex-col items-center gap-1">
+          <i data-lucide="layout-grid" class="w-5 h-5 text-sky-300"></i>
+          <span class="text-[9px] text-white/55">Menu</span>
+        </button>
+        <button @click="tvAction('picture')" class="app-chip rounded-xl py-2.5 flex flex-col items-center gap-1">
+          <i data-lucide="image" class="w-5 h-5 text-amber-300"></i>
+          <span class="text-[9px] text-white/55">Image</span>
+        </button>
+        <button @click="tvAction('sound')" class="app-chip rounded-xl py-2.5 flex flex-col items-center gap-1">
+          <i data-lucide="volume-2" class="w-5 h-5 text-emerald-300"></i>
+          <span class="text-[9px] text-white/55">Son</span>
+        </button>
+        <button @click="tvAction('source')" class="app-chip rounded-xl py-2.5 flex flex-col items-center gap-1">
+                      <i data-lucide="cable" class="w-5 h-5 text-violet-300"></i>
+          <span class="text-[9px] text-white/55">Source</span>
+        </button>
+        <button @click="tvAction('settings')" class="app-chip rounded-xl py-2.5 flex flex-col items-center gap-1">
+          <i data-lucide="sliders-horizontal" class="w-5 h-5 text-white/70"></i>
+          <span class="text-[9px] text-white/55">Réglages</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="relative flex justify-between items-center px-2">
+      <button @click="k('POWER')" class="key key-power w-14 h-14 rounded-full flex items-center justify-center">
+        <i data-lucide="power" class="w-6 h-6"></i>
+      </button>
+      <button @click="k('KEYCODE_TV_INPUT')" class="key w-12 h-12 rounded-full flex items-center justify-center">
+        <i data-lucide="tv" class="w-5 h-5 text-white/80"></i>
+      </button>
+      <button @click="k('KEYCODE_SEARCH')" class="key w-12 h-12 rounded-full flex items-center justify-center">
+        <i data-lucide="search" class="w-5 h-5 text-white/80"></i>
+      </button>
+      <button
+        @pointerdown.prevent="startVoice()"
+        @pointerup.prevent="stopVoice()"
+        @pointerleave="stopVoice()"
+        @touchstart.prevent="startVoice()"
+        @touchend.prevent="stopVoice()"
+        class="key w-14 h-14 rounded-full flex items-center justify-center"
+        :class="listening && 'mic-live'"
+        title="Maintenir pour parler (micro PC)">
+        <i data-lucide="mic" class="w-6 h-6"></i>
+      </button>
+    </div>
+
+    <p class="relative text-center text-[11px] min-h-[1rem]" :class="listening ? 'text-rose-300' : 'text-white/35'" x-text="voiceHint"></p>
+
+    <!-- Apps détectées sur CETTE télé -->
+    <div class="relative">
+      <p class="text-[10px] uppercase tracking-[0.2em] text-white/35 mb-2 px-1">
+        Apps <span class="text-white/25" x-text="st.profile?.apps ? '(' + st.profile.apps.length + ')' : ''"></span>
+      </p>
+      <div class="grid grid-cols-4 gap-2.5">
+        <template x-for="app in visibleApps" :key="app.id">
+          <button @click="openApp(app.id)" class="app-chip rounded-2xl aspect-square flex flex-col items-center justify-center gap-1 px-1">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-extrabold"
+                 :style="'background:' + (appColor(app.id)) + ';color:#fff'"
+                 x-text="appShort(app.label)"></div>
+            <span class="text-[10px] text-white/55 truncate w-full text-center" x-text="app.label"></span>
+          </button>
+        </template>
+        <button @click="startVoice()" class="app-chip rounded-2xl aspect-square flex flex-col items-center justify-center gap-1">
+          <i data-lucide="sparkles" class="w-7 h-7 text-sky-300"></i>
+          <span class="text-[10px] text-white/55">Vocal</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="relative flex justify-between px-4">
+      <button @click="k('KEYCODE_BACK')" class="key w-14 h-14 rounded-full flex items-center justify-center"><i data-lucide="undo-2" class="w-5 h-5"></i></button>
+      <button @click="k('KEYCODE_HOME')" class="key w-14 h-14 rounded-full flex items-center justify-center"><i data-lucide="home" class="w-5 h-5"></i></button>
+      <button @click="tvAction('menu')" class="key key-accent w-14 h-14 rounded-full flex items-center justify-center" title="Menu TV Image/Son">
+        <i data-lucide="menu" class="w-5 h-5"></i>
+      </button>
+      <button @click="tvAction('network')" class="key w-14 h-14 rounded-full flex items-center justify-center" title="Réseau">
+        <i data-lucide="wifi" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <div class="relative mx-auto w-56 h-56 dpad rounded-full grid grid-cols-3 grid-rows-3 p-3">
+      <span></span>
+      <button @click="k('KEYCODE_DPAD_UP')" class="key rounded-2xl flex items-center justify-center"><i data-lucide="chevron-up" class="w-7 h-7"></i></button>
+      <span></span>
+      <button @click="k('KEYCODE_DPAD_LEFT')" class="key rounded-2xl flex items-center justify-center"><i data-lucide="chevron-left" class="w-7 h-7"></i></button>
+      <button @click="k('KEYCODE_DPAD_CENTER')" class="ok-btn rounded-full flex items-center justify-center font-extrabold text-lg">OK</button>
+      <button @click="k('KEYCODE_DPAD_RIGHT')" class="key rounded-2xl flex items-center justify-center"><i data-lucide="chevron-right" class="w-7 h-7"></i></button>
+      <span></span>
+      <button @click="k('KEYCODE_DPAD_DOWN')" class="key rounded-2xl flex items-center justify-center"><i data-lucide="chevron-down" class="w-7 h-7"></i></button>
+      <span></span>
+    </div>
+
+    <div class="relative flex justify-between items-center px-3">
+      <button @click="k('KEYCODE_MEDIA_REWIND')" class="key w-12 h-12 rounded-full flex items-center justify-center"><i data-lucide="rewind" class="w-5 h-5"></i></button>
+      <button @click="k('KEYCODE_MEDIA_PLAY_PAUSE')" class="key w-16 h-16 rounded-full flex items-center justify-center"><i data-lucide="play" class="w-6 h-6 fill-white"></i></button>
+      <button @click="k('KEYCODE_MEDIA_FAST_FORWARD')" class="key w-12 h-12 rounded-full flex items-center justify-center"><i data-lucide="fast-forward" class="w-5 h-5"></i></button>
+    </div>
+
+    <div class="relative flex justify-between items-end px-1">
+      <div class="flex flex-col items-center gap-2">
+        <button @click="k('KEYCODE_VOLUME_UP')" class="key w-[4.5rem] h-12 rounded-2xl flex items-center justify-center"><i data-lucide="plus" class="w-5 h-5"></i></button>
+        <span class="text-[10px] tracking-[0.2em] text-white/40 font-semibold">VOL</span>
+        <button @click="k('KEYCODE_VOLUME_DOWN')" class="key w-[4.5rem] h-12 rounded-2xl flex items-center justify-center"><i data-lucide="minus" class="w-5 h-5"></i></button>
+      </div>
+      <button @click="k('KEYCODE_VOLUME_MUTE')" class="key w-14 h-14 rounded-full flex items-center justify-center mb-6"><i data-lucide="volume-x" class="w-5 h-5"></i></button>
+      <div class="flex flex-col items-center gap-2">
+        <button @click="k('KEYCODE_CHANNEL_UP')" class="key w-[4.5rem] h-12 rounded-2xl flex items-center justify-center"><i data-lucide="plus" class="w-5 h-5"></i></button>
+        <span class="text-[10px] tracking-[0.2em] text-white/40 font-semibold">CH</span>
+        <button @click="k('KEYCODE_CHANNEL_DOWN')" class="key w-[4.5rem] h-12 rounded-2xl flex items-center justify-center"><i data-lucide="minus" class="w-5 h-5"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function remote() {
+  return {
+    st: { status: 'idle', error: null, profile: null },
+    devices: [], scanning: false, scanningBt: false, btBusy: false, btPairing: false, btNote: '', manualIp: '172.20.10.6', code: '',
+    pairHost: '172.20.10.6', pairPort: '', pairCode: '', connectPort: '5555',
+    listening: false, voiceHint: 'Maintiens le micro pour parler (PC → télé)',
+    recognition: null, _voiceSent: false,
+    get tvTitle() {
+      const p = this.st.profile;
+      if (p?.brand || p?.model) return [p.brand, p.model].filter(Boolean).join(' ');
+      return this.st.platform || 'Smart TV';
+    },
+    get visibleApps() {
+      const apps = this.st.profile?.apps;
+      if (apps?.length) return apps.slice(0, 11);
+      return [
+        { id: 'netflix', label: 'Netflix' }, { id: 'youtube', label: 'YouTube' },
+        { id: 'prime', label: 'Prime' }, { id: 'disney', label: 'Disney+' },
+        { id: 'spotify', label: 'Spotify' }, { id: 'playstore', label: 'Play' },
+        { id: 'settings', label: 'Réglages' },
+      ];
+    },
+    appShort(label) {
+      const s = String(label || '?');
+      return s.length <= 2 ? s.toUpperCase() : s.slice(0, 2).toUpperCase();
+    },
+    appColor(id) {
+      return ({
+        netflix: '#E50914', youtube: '#FF0000', prime: '#00A8E1', disney: '#113CCF',
+        spotify: '#1DB954', playstore: '#34A853', settings: '#64748b', canal: '#000',
+        molotov: '#E10600', pluto: '#FFF200', twitch: '#9146FF', plex: '#E5A00D',
+        vlc: '#FF8800', browser: '#3B82F6', live: '#22C55E', telegram: '#2AABEE',
+        crunchyroll: '#F47521', rakuten: '#BF0000',
+      })[id] || '#475569';
+    },
+    async init() {
+      this.poll();
+      setInterval(() => this.poll(), 1500);
+      this.$nextTick(() => { try { lucide.createIcons(); } catch {} });
+      this.$watch('st.status', () => this.$nextTick(() => { try { lucide.createIcons(); } catch {} }));
+      this.$watch('st.profile', () => this.$nextTick(() => { try { lucide.createIcons(); } catch {} }));
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        this.recognition = new SR();
+        this.recognition.lang = 'fr-FR';
+        this.recognition.interimResults = true;
+        this.recognition.continuous = false;
+        this.recognition.onresult = (ev) => {
+          let finalText = '';
+          let interim = '';
+          for (let i = ev.resultIndex; i < ev.results.length; i++) {
+            const t = ev.results[i][0].transcript;
+            if (ev.results[i].isFinal) finalText += t;
+            else interim += t;
+          }
+          this.voiceHint = finalText || interim || 'Écoute…';
+          if (finalText) this.sendVoice(finalText);
+        };
+        this.recognition.onerror = () => {
+          this.listening = false;
+          this.voiceHint = 'Micro refusé ou indisponible — autorise le micro dans le navigateur';
+        };
+        this.recognition.onend = () => {
+          this.listening = false;
+          if (!this._voiceSent) this.voiceHint = 'Maintiens le micro pour parler (PC → télé)';
+        };
+      } else {
+        this.voiceHint = 'Reconnaissance vocale non supportée par ce navigateur (essaie Chrome)';
+      }
+    },
+    async poll() { try { this.st = await (await fetch('/api/status')).json(); } catch {} },
+    async scan() {
+      this.scanning = true;
+      this.devices = await (await fetch('/api/scan')).json();
+      this.scanning = false;
+      this.$nextTick(() => lucide.createIcons());
+    },
+    async scanBt() {
+      this.scanningBt = true;
+      this.btNote = 'Scan Bluetooth…';
+      try {
+        const r = await (await fetch('/api/bt/scan')).json();
+        this.btNote = r.note || '';
+        const list = r.tvs || [];
+        // fusionne avec la liste actuelle
+        const map = new Map(this.devices.map((d) => [d.host || d.btAddress, d]));
+        for (const d of list) map.set(d.host || d.btAddress, d);
+        this.devices = [...map.values()];
+        if (!list.length) this.btNote = (this.btNote ? this.btNote + '\n\n' : '') + 'Aucune télé Bluetooth trouvée pour l’instant.';
+      } catch (e) {
+        this.btNote = 'Scan Bluetooth impossible : ' + e;
+      }
+      this.scanningBt = false;
+      this.$nextTick(() => lucide.createIcons());
+    },
+    async becomeAccessory() {
+      this.btBusy = true;
+      this.btNote = 'Préparation du mode accessoire Bluetooth…';
+      try {
+        const host = this.st.host || this.manualIp || null;
+        const r = await this.post('/api/bt/become-accessory', host ? { host } : {});
+        this.btNote = r.help || r.note || 'OK';
+        if (r.state) this.st = r.state;
+      } catch (e) {
+        this.btNote = 'Erreur : ' + e;
+      }
+      this.btBusy = false;
+      this.$nextTick(() => lucide.createIcons());
+    },
+    async pairClassic() {
+      this.btPairing = true;
+      this.btNote = 'Ouvre « Ajouter un accessoire » sur la télé, puis choisis la télé dans la fenêtre Mac…';
+      try {
+        const r = await this.post('/api/bt/pair-classic', {});
+        this.btNote = r.help || r.error || 'OK';
+        if (r.state) this.st = r.state;
+      } catch (e) {
+        this.btNote = 'Erreur : ' + e;
+      }
+      this.btPairing = false;
+      this.$nextTick(() => lucide.createIcons());
+    },
+    async openBtPair() { return this.pairClassic(); },
+    async post(url, body) {
+      return (await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })).json();
+    },
+    connectDevice(d) {
+      if (!d?.host) {
+        this.btNote = 'TV vue en Bluetooth sans IP. Entre l’IP manuellement, ou reconnecte la télé au hotspot/Wi‑Fi.';
+        if (d.btAddress) this.btNote += '\nMAC BT : ' + d.btAddress;
+        return;
+      }
+      this.manualIp = d.host;
+      this.connect(d.host, d.transport?.includes('bluetooth'), d.type);
+    },
+    async connect(host, preferAdb = false, type = null) {
+      if (!host) return;
+      this.st = { status: 'connecting', host, error: null };
+      this.post('/api/connect', { host, preferAdb: !!preferAdb, type });
+    },
+    async pairAdb() {
+      this.st = { status: 'connecting', host: this.pairHost, error: null };
+      this.st = await this.post('/api/adb-pair', {
+        host: this.pairHost, port: this.pairPort, code: this.pairCode, connectPort: this.connectPort || 5555,
+      });
+    },
+    async cancel() { this.st = await this.post('/api/cancel'); },
+    async sendCode() { await this.post('/api/code', { code: this.code }); this.code = ''; },
+    k(key) { this.post('/api/key', { key }); },
+    openApp(app) { this.post('/api/app', { app }); },
+    tvAction(action) { this.post('/api/tv-action', { action }); },
+    startVoice() {
+      if (!this.recognition || this.listening) return;
+      this._voiceSent = false;
+      this.listening = true;
+      this.voiceHint = 'Écoute… parle maintenant';
+      try { this.recognition.start(); } catch { this.listening = false; }
+    },
+    stopVoice() {
+      if (!this.recognition || !this.listening) return;
+      try { this.recognition.stop(); } catch {}
+    },
+    async sendVoice(text) {
+      this._voiceSent = true;
+      this.voiceHint = 'Envoi : ' + text;
+      const r = await this.post('/api/voice', { text });
+      if (r.ok) {
+        const a = r.action;
+        this.voiceHint = a?.type === 'app' ? `Ouverture ${a.app}` : a?.type === 'key' ? `Touche ${a.key}` : `Recherche : ${a?.query || text}`;
+      } else {
+        this.voiceHint = r.error || 'Échec commande vocale';
+      }
+    },
+    onKey(e) {
+      if (this.st.status !== 'ready' || e.target.tagName === 'INPUT') return;
+      const m = {
+        ArrowUp: 'KEYCODE_DPAD_UP', ArrowDown: 'KEYCODE_DPAD_DOWN', ArrowLeft: 'KEYCODE_DPAD_LEFT', ArrowRight: 'KEYCODE_DPAD_RIGHT',
+        Enter: 'KEYCODE_DPAD_CENTER', Escape: 'KEYCODE_BACK', ' ': 'KEYCODE_MEDIA_PLAY_PAUSE',
+        '+': 'KEYCODE_VOLUME_UP', '=': 'KEYCODE_VOLUME_UP', '-': 'KEYCODE_VOLUME_DOWN', m: 'KEYCODE_VOLUME_MUTE',
+        h: 'KEYCODE_HOME', Backspace: 'KEYCODE_BACK',
+      };
+      if (m[e.key]) { e.preventDefault(); this.k(m[e.key]); }
+    }
+  };
+}
+</script>
+</body>
+</html>

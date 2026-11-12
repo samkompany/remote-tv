@@ -1,0 +1,16 @@
+node_modules/
+.DS_Store
+.env
+.env.*
+cert.json
+*.log
+.vercel/
+dist/
+native/BtHidBridge/.build/
+native/BtHidBridge/TelecommandeMac.app/
+vendor/BTRemote.app/
+vendor/*.pkg
+.idea/
+.vscode/
+*.pem
+*.p12

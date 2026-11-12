@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "mkdir -p dist && cp -R public/. dist/",
+  "outputDirectory": "dist",
+  "installCommand": "echo 'static UI — no install'",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/offline.html" },
+    { "source": "/", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    }
+  ]
+}

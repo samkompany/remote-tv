@@ -1,0 +1,15 @@
+{
+  "name": "smart-tv-remote",
+  "version": "1.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "build": "mkdir -p dist && cp -R public/. dist/"
+  },
+  "dependencies": {
+    "@abandonware/noble": "^1.9.2-26",
+    "androidtv-remote": "^1.0.9",
+    "bonjour-service": "^1.2.1",
+    "express": "^4.19.2"
+  }
+}

@@ -89,7 +89,20 @@
     </div>
 
     <div x-show="st.status==='idle'" class="remote-shell rounded-[2rem] p-5 space-y-3 setup-panel">
-      <button @click="scan()" class="key key-accent w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2">
+      <div class="rounded-2xl bg-amber-500/10 border border-amber-400/25 p-3 space-y-2" x-show="cloudMode">
+        <p class="text-sm font-semibold text-amber-100">Mode en ligne (Vercel)</p>
+        <p class="text-[11px] text-amber-100/70 leading-relaxed">
+          Le site cloud ne voit pas ta télé tout seul. Chez toi, sur le même Wi‑Fi que la télé :
+          <span class="text-white">npm run share</span>, puis colle ici l’URL du pont (ou ouvre le lien complet affiché dans le terminal).
+        </p>
+        <div class="flex gap-2">
+          <input x-model="bridgeUrl" placeholder="https://….loca.lt" class="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none">
+          <button @click="saveBridge()" class="key key-accent rounded-xl px-4 font-semibold text-sm">OK</button>
+        </div>
+        <p class="text-[10px] text-white/40" x-show="bridgeUrl" x-text="'Pont : ' + apiBase"></p>
+      </div>
+
+      <button @click="scan()" class="key key-accent w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2" :disabled="cloudMode && !apiBase">
         <i data-lucide="radar" class="w-5 h-5"></i>
         <span x-text="scanning ? 'Recherche Wi‑Fi…' : 'Rechercher (Wi‑Fi / mDNS)'"></span>
       </button>
@@ -305,10 +318,13 @@
 function remote() {
   return {
     st: { status: 'idle', error: null, profile: null },
-    devices: [], scanning: false, scanningBt: false, btBusy: false, btPairing: false, btNote: '', manualIp: '172.20.10.6', code: '',
-    pairHost: '172.20.10.6', pairPort: '', pairCode: '', connectPort: '5555',
+    devices: [], scanning: false, scanningBt: false, btBusy: false, btPairing: false, btNote: '', manualIp: '', code: '',
+    pairHost: '', pairPort: '', pairCode: '', connectPort: '5555',
     listening: false, voiceHint: 'Maintiens le micro pour parler (PC → télé)',
     recognition: null, _voiceSent: false,
+    cloudMode: false,
+    bridgeUrl: '',
+    apiBase: '',
     get tvTitle() {
       const p = this.st.profile;
       if (p?.brand || p?.model) return [p.brand, p.model].filter(Boolean).join(' ');
@@ -338,6 +354,8 @@ function remote() {
       })[id] || '#475569';
     },
     async init() {
+      this.loadBridgeFromUrl();
+      await this.detectCloudMode();
       this.poll();
       setInterval(() => this.poll(), 1500);
       this.$nextTick(() => { try { lucide.createIcons(); } catch {} });
@@ -372,21 +390,85 @@ function remote() {
         this.voiceHint = 'Reconnaissance vocale non supportée par ce navigateur (essaie Chrome)';
       }
     },
-    async poll() { try { this.st = await (await fetch('/api/status')).json(); } catch {} },
+    loadBridgeFromUrl() {
+      const q = new URLSearchParams(location.search);
+      const fromQuery = q.get('bridge') || q.get('pont') || '';
+      const stored = localStorage.getItem('remoteTvBridge') || '';
+      this.bridgeUrl = fromQuery || stored;
+      this.apiBase = this.normalizeBase(this.bridgeUrl);
+      if (fromQuery) localStorage.setItem('remoteTvBridge', this.apiBase);
+    },
+    normalizeBase(url) {
+      const u = String(url || '').trim().replace(/\/$/, '');
+      if (!u) return '';
+      if (/^https?:\/\//i.test(u)) return u;
+      return 'https://' + u;
+    },
+    saveBridge() {
+      this.apiBase = this.normalizeBase(this.bridgeUrl);
+      if (this.apiBase) localStorage.setItem('remoteTvBridge', this.apiBase);
+      else localStorage.removeItem('remoteTvBridge');
+      this.btNote = this.apiBase ? 'Pont enregistré. Tu peux rechercher la télé.' : 'Pont effacé.';
+      this.poll();
+      this.$nextTick(() => lucide.createIcons());
+    },
+    async detectCloudMode() {
+      // Hébergé (Vercel) = pas de serveur local sur la même origine
+      const host = location.hostname;
+      const looksHosted = /\.vercel\.app$|\.vercel\.sh$/i.test(host) || host === 'remote-tv';
+      if (looksHosted) {
+        this.cloudMode = true;
+        return;
+      }
+      try {
+        const r = await fetch('/api/status', { signal: AbortSignal.timeout(1200) });
+        this.cloudMode = !r.ok;
+      } catch {
+        this.cloudMode = true;
+      }
+    },
+    apiUrl(path) {
+      const p = path.startsWith('/') ? path : '/' + path;
+      return (this.apiBase || '') + p;
+    },
+    async poll() {
+      try {
+        this.st = await (await fetch(this.apiUrl('/api/status'))).json();
+        if (this.st?.bridge?.publicUrl && !this.apiBase) {
+          // utile en local pendant npm run share
+        }
+      } catch {
+        if (this.cloudMode && !this.apiBase) {
+          this.st = { status: 'idle', error: null, profile: null };
+        }
+      }
+    },
     async scan() {
+      if (this.cloudMode && !this.apiBase) {
+        this.btNote = 'Colle d’abord l’URL du pont (npm run share chez toi).';
+        return;
+      }
       this.scanning = true;
-      this.devices = await (await fetch('/api/scan')).json();
+      try {
+        this.devices = await (await fetch(this.apiUrl('/api/scan'))).json();
+      } catch (e) {
+        this.devices = [];
+        this.btNote = 'Pont injoignable. Vérifie npm run share et l’URL.';
+      }
       this.scanning = false;
       this.$nextTick(() => lucide.createIcons());
     },
     async scanBt() {
+      if (this.cloudMode && !this.apiBase) {
+        this.btNote = 'Colle d’abord l’URL du pont.';
+        return;
+      }
       this.scanningBt = true;
       this.btNote = 'Scan Bluetooth…';
       try {
-        const r = await (await fetch('/api/bt/scan')).json();
+        const r = await (await fetch(this.apiUrl('/api/bt/scan'))).json();
         this.btNote = r.note || '';
         const list = r.tvs || [];
-        // fusionne avec la liste actuelle
         const map = new Map(this.devices.map((d) => [d.host || d.btAddress, d]));
         for (const d of list) map.set(d.host || d.btAddress, d);
         this.devices = [...map.values()];
@@ -426,7 +508,11 @@ function remote() {
     },
     async openBtPair() { return this.pairClassic(); },
     async post(url, body) {
-      return (await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })).json();
+      return (await fetch(this.apiUrl(url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+      })).json();
     },
     connectDevice(d) {
       if (!d?.host) {

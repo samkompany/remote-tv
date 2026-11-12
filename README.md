@@ -1,43 +1,47 @@
 # remote-tv
 
-Télécommande web universelle pour Smart TV (Android TV / Google TV, ADB, Roku, Bluetooth HID).
+Télécommande web pour Smart TV (Android TV / Google TV, ADB, Roku, Bluetooth).
 
-## Démarrage local (vrai contrôle TV)
+## Pourquoi Vercel seul ne trouve pas la télé ?
+
+Le site sur Vercel est dans le **cloud**. La télé est derrière ton **Wi‑Fi (NAT)**.  
+Les deux ont Internet, mais **Internet ne permet pas de “voir” un appareil dans un salon** sans un relais chez toi.
+
+```
+[Navigateur / Vercel] ──HTTPS──► [Pont chez toi] ──Wi‑Fi local──► [Télé]
+```
+
+## Mode en ligne (lien à envoyer)
+
+Sur l’ordinateur **à la maison** (même Wi‑Fi que la télé) :
 
 ```bash
 npm install
+export VERCEL_APP_URL=https://TON-APP.vercel.app
+npm run share
+```
+
+Le terminal affiche un **lien à envoyer**. Ce lien ouvre l’UI Vercel déjà branchée sur ton pont.
+
+Sinon, ouvre ton site Vercel et colle l’URL du pont (`https://….loca.lt`) dans le champ prévu.
+
+## Mode local uniquement
+
+```bash
 npm start
 ```
 
-Ouvre [http://localhost:3000](http://localhost:3000).  
-Le Mac/PC doit être sur le **même Wi‑Fi** que la télé (ou hotspot).
+→ [http://localhost:3000](http://localhost:3000)
 
-### Bluetooth accessoire (sans Wi‑Fi après appairage)
+## Déploiement Vercel (UI)
 
-```bash
-cd native/BtHidBridge
-swift build -c release
-```
+`vercel.json` sert le dossier `public/`.  
+Le contrôle réel passe toujours par `npm run share` chez la personne qui a la télé.
 
-Puis dans l’UI : **Activer accessoire Bluetooth** → **Appairer la télé**.
-
-## Déploiement Vercel (UI / démo)
-
-Le site sur Vercel sert l’interface (`public/`). Les routes `/api/*` affichent une page d’aide : le pilotage réel ne peut pas tourner dans le cloud (réseau local + Bluetooth).
-
-1. Import du repo sur [vercel.com/new](https://vercel.com/new)
-2. Framework Preset : **Other**
-3. Build & Output déjà définis dans `vercel.json`
-4. Deploy
-
-Ou en CLI :
+## Bluetooth accessoire
 
 ```bash
-npx vercel
+cd native/BtHidBridge && swift build -c release
 ```
 
-## Stack
-
-- Node / Express (`server.js`)
-- UI : `public/index.html`
-- ADB / discovery / voice / Roku / Bluetooth helpers
+Puis dans l’UI : activer l’accessoire → appairer la télé.

@@ -23,9 +23,23 @@ import {
 const CERT_FILE = './cert.json';
 const CONNECT_TIMEOUT_MS = 12000;
 const ADB_PORT = 5555;
+const PORT = Number(process.env.PORT || 3000);
+const VERCEL_APP_URL = (process.env.VERCEL_APP_URL || '').replace(/\/$/, '');
 const app = express();
+
+/** Autorise l’UI Vercel (autre origine) à piloter ce pont local/tunnel */
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
 app.use(express.json());
 app.use(express.static('public'));
+
+let publicTunnelUrl = null;
 
 let remote = null;
 let connectTimer = null;
@@ -609,7 +623,33 @@ app.post('/api/voice', async (req, res) => {
   res.status(409).json({ error: 'Vocal non disponible dans ce mode' });
 });
 
-app.get('/api/status', (req, res) => res.json({ ...state, profile: tvProfile || state.profile }));
+app.get('/api/status', (req, res) => res.json({
+  ...state,
+  profile: tvProfile || state.profile,
+  bridge: {
+    publicUrl: publicTunnelUrl,
+    localUrl: `http://localhost:${PORT}`,
+    shareLink: publicTunnelUrl && VERCEL_APP_URL
+      ? `${VERCEL_APP_URL}?bridge=${encodeURIComponent(publicTunnelUrl)}`
+      : publicTunnelUrl
+        ? `(définis VERCEL_APP_URL) ?bridge=${encodeURIComponent(publicTunnelUrl)}`
+        : null,
+  },
+}));
+
+app.get('/api/bridge', (req, res) => {
+  res.json({
+    ok: true,
+    publicUrl: publicTunnelUrl,
+    localUrl: `http://localhost:${PORT}`,
+    shareLink: publicTunnelUrl && VERCEL_APP_URL
+      ? `${VERCEL_APP_URL}?bridge=${encodeURIComponent(publicTunnelUrl)}`
+      : null,
+    help: publicTunnelUrl
+      ? 'Partage le lien Vercel avec ?bridge=… ou colle l’URL du pont dans l’UI en ligne.'
+      : 'Lance avec npm run share pour exposer un pont HTTPS public.',
+  });
+});
 
 app.post('/api/discover', async (req, res) => {
   if (state.status !== 'ready' || activeType !== 'adb' || !adbTarget) {
@@ -619,4 +659,35 @@ app.post('/api/discover', async (req, res) => {
   res.json({ ok: true, profile: tvProfile });
 });
 
-app.listen(3000, () => console.log('Smart TV Remote → http://localhost:3000'));
+async function startPublicTunnel() {
+  const wantShare = process.env.SHARE === '1' || process.argv.includes('--share');
+  if (!wantShare) return;
+  try {
+    const localtunnel = (await import('localtunnel')).default;
+    const tunnel = await localtunnel({ port: PORT });
+    publicTunnelUrl = tunnel.url;
+    console.log('');
+    console.log('══════════════════════════════════════════════');
+    console.log('  PONT PUBLIC (relie Vercel → ta télé chez toi)');
+    console.log('  URL du pont :', publicTunnelUrl);
+    if (VERCEL_APP_URL) {
+      console.log('  Lien à envoyer :', `${VERCEL_APP_URL}?bridge=${encodeURIComponent(publicTunnelUrl)}`);
+    } else {
+      console.log('  Sur Vercel : colle cette URL dans « URL du pont »');
+      console.log('  Astuce : export VERCEL_APP_URL=https://ton-app.vercel.app');
+    }
+    console.log('══════════════════════════════════════════════');
+    console.log('');
+    tunnel.on('close', () => {
+      publicTunnelUrl = null;
+      console.log('Tunnel fermé');
+    });
+  } catch (e) {
+    console.warn('Tunnel public impossible:', e?.message || e);
+  }
+}
+
+app.listen(PORT, async () => {
+  console.log(`Smart TV Remote → http://localhost:${PORT}`);
+  await startPublicTunnel();
+});

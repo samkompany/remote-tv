@@ -90,38 +90,41 @@
 
     <div x-show="st.status==='idle'" class="remote-shell rounded-[2rem] p-5 space-y-3 setup-panel">
       <div class="rounded-2xl bg-amber-500/10 border border-amber-400/25 p-3 space-y-2" x-show="cloudMode">
-        <p class="text-sm font-semibold text-amber-100">Mode en ligne (Vercel)</p>
-        <p class="text-[11px] text-amber-100/70 leading-relaxed">
-          Le site cloud ne voit pas ta télé tout seul. Chez toi, sur le même Wi‑Fi que la télé :
-          <span class="text-white">npm run share</span>, puis colle ici l’URL du pont (ou ouvre le lien complet affiché dans le terminal).
+        <p class="text-sm font-semibold text-amber-100">Lien en ligne = pont chez toi requis</p>
+        <p class="text-[11px] text-amber-100/75 leading-relaxed">
+          Sur le Mac/PC <span class="text-white">à la maison</span> (même Wi‑Fi que la télé) lance :
+          <span class="text-white font-mono">npm run share</span>
+          puis ouvre le lien affiché, ou colle l’URL du pont ici.
         </p>
         <div class="flex gap-2">
-          <input x-model="bridgeUrl" placeholder="https://….loca.lt" class="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none">
+          <input x-model="bridgeUrl" placeholder="https://….trycloudflare.com" class="flex-1 rounded-xl px-3 py-2.5 text-sm outline-none">
           <button @click="saveBridge()" class="key key-accent rounded-xl px-4 font-semibold text-sm">OK</button>
         </div>
-        <p class="text-[10px] text-white/40" x-show="bridgeUrl" x-text="'Pont : ' + apiBase"></p>
+        <p class="text-[11px]" :class="bridgeOk ? 'text-emerald-300' : 'text-rose-300'" x-text="bridgeStatus" x-show="bridgeStatus"></p>
       </div>
 
       <button @click="scan()" class="key key-accent w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2" :disabled="cloudMode && !apiBase">
         <i data-lucide="radar" class="w-5 h-5"></i>
-        <span x-text="scanning ? 'Recherche Wi‑Fi…' : 'Rechercher (Wi‑Fi / mDNS)'"></span>
+        <span x-text="scanning ? 'Recherche Wi‑Fi…' : 'Rechercher la télé'"></span>
       </button>
-      <button @click="scanBt()" class="key w-full rounded-2xl py-3 font-semibold flex items-center justify-center gap-2">
-        <i data-lucide="bluetooth" class="w-5 h-5 text-sky-300"></i>
-        <span x-text="scanningBt ? 'Scan Bluetooth…' : 'Trouver la télé (Bluetooth)'"></span>
-      </button>
-      <button @click="becomeAccessory()" class="key w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 border border-sky-500/40">
-        <i data-lucide="smartphone" class="w-5 h-5 text-sky-300"></i>
-        <span x-text="btBusy ? 'Préparation accessoire…' : '1. Activer accessoire Bluetooth'"></span>
-      </button>
-      <button @click="pairClassic()" class="key key-accent w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2">
-        <i data-lucide="bluetooth-connected" class="w-5 h-5"></i>
-        <span x-text="btPairing ? 'Fenêtre Mac ouverte…' : '2. Appairer la télé (Bluetooth)'"></span>
-      </button>
-      <p class="text-[11px] text-sky-200/70 leading-relaxed">
-        La télé ne voit souvent pas le BLE seul. Laisse-la sur <span class="text-white">Ajouter un accessoire</span>,
-        puis clique le bouton 2 et <span class="text-white">choisis la télé dans la fenêtre Mac</span>. Ensuite tu peux couper le Wi‑Fi.
-      </p>
+
+      <div x-show="!cloudMode" class="space-y-3">
+        <button @click="scanBt()" class="key w-full rounded-2xl py-3 font-semibold flex items-center justify-center gap-2">
+          <i data-lucide="bluetooth" class="w-5 h-5 text-sky-300"></i>
+          <span x-text="scanningBt ? 'Scan Bluetooth…' : 'Trouver la télé (Bluetooth)'"></span>
+        </button>
+        <button @click="becomeAccessory()" class="key w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2 border border-sky-500/40">
+          <i data-lucide="smartphone" class="w-5 h-5 text-sky-300"></i>
+          <span x-text="btBusy ? 'Préparation accessoire…' : '1. Activer accessoire Bluetooth'"></span>
+        </button>
+        <button @click="pairClassic()" class="key key-accent w-full rounded-2xl py-3.5 font-semibold flex items-center justify-center gap-2">
+          <i data-lucide="bluetooth-connected" class="w-5 h-5"></i>
+          <span x-text="btPairing ? 'Fenêtre Mac ouverte…' : '2. Appairer la télé (Bluetooth)'"></span>
+        </button>
+        <p class="text-[11px] text-sky-200/70 leading-relaxed">
+          Bluetooth local uniquement. Sur Vercel, utilise le pont (<span class="text-white">npm run share</span>).
+        </p>
+      </div>
 
       <template x-for="d in devices" :key="(d.host || d.btAddress || '') + (d.type||'')">
         <div class="flex gap-2">
@@ -318,13 +321,15 @@
 function remote() {
   return {
     st: { status: 'idle', error: null, profile: null },
-    devices: [], scanning: false, scanningBt: false, btBusy: false, btPairing: false, btNote: '', manualIp: '', code: '',
-    pairHost: '', pairPort: '', pairCode: '', connectPort: '5555',
+    devices: [], scanning: false, scanningBt: false, btBusy: false, btPairing: false, btNote: '', manualIp: '172.20.10.6', code: '',
+    pairHost: '172.20.10.6', pairPort: '', pairCode: '', connectPort: '5555',
     listening: false, voiceHint: 'Maintiens le micro pour parler (PC → télé)',
     recognition: null, _voiceSent: false,
     cloudMode: false,
     bridgeUrl: '',
     apiBase: '',
+    bridgeOk: false,
+    bridgeStatus: '',
     get tvTitle() {
       const p = this.st.profile;
       if (p?.brand || p?.model) return [p.brand, p.model].filter(Boolean).join(' ');
@@ -356,6 +361,9 @@ function remote() {
     async init() {
       this.loadBridgeFromUrl();
       await this.detectCloudMode();
+      if (this.cloudMode && this.apiBase) {
+        await this.saveBridge();
+      }
       this.poll();
       setInterval(() => this.poll(), 1500);
       this.$nextTick(() => { try { lucide.createIcons(); } catch {} });
@@ -393,6 +401,13 @@ function remote() {
     loadBridgeFromUrl() {
       const q = new URLSearchParams(location.search);
       const fromQuery = q.get('bridge') || q.get('pont') || '';
+      // En local, ne jamais détourner les API vers un vieux pont cloud
+      const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (isLocal && !fromQuery) {
+        this.bridgeUrl = '';
+        this.apiBase = '';
+        return;
+      }
       const stored = localStorage.getItem('remoteTvBridge') || '';
       this.bridgeUrl = fromQuery || stored;
       this.apiBase = this.normalizeBase(this.bridgeUrl);
@@ -404,18 +419,46 @@ function remote() {
       if (/^https?:\/\//i.test(u)) return u;
       return 'https://' + u;
     },
-    saveBridge() {
+    async saveBridge() {
       this.apiBase = this.normalizeBase(this.bridgeUrl);
       if (this.apiBase) localStorage.setItem('remoteTvBridge', this.apiBase);
       else localStorage.removeItem('remoteTvBridge');
-      this.btNote = this.apiBase ? 'Pont enregistré. Tu peux rechercher la télé.' : 'Pont effacé.';
+      this.bridgeStatus = 'Test du pont…';
+      this.bridgeOk = false;
+      if (this.apiBase) {
+        try {
+          const r = await fetch(this.apiUrl('/api/status'), {
+            headers: this.apiHeaders(),
+            signal: AbortSignal.timeout(8000),
+          });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          await r.json();
+          this.bridgeOk = true;
+          this.bridgeStatus = 'Pont OK — tu peux rechercher la télé.';
+        } catch (e) {
+          this.bridgeOk = false;
+          this.bridgeStatus = 'Pont injoignable. Relance npm run share chez toi et recolle l’URL.';
+        }
+      } else {
+        this.bridgeStatus = 'Pont effacé.';
+      }
       this.poll();
       this.$nextTick(() => lucide.createIcons());
     },
+    apiHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Bypass-Tunnel-Reminder': 'true',
+      };
+    },
     async detectCloudMode() {
-      // Hébergé (Vercel) = pas de serveur local sur la même origine
       const host = location.hostname;
-      const looksHosted = /\.vercel\.app$|\.vercel\.sh$/i.test(host) || host === 'remote-tv';
+      if (host === 'localhost' || host === '127.0.0.1') {
+        this.cloudMode = false;
+        this.apiBase = '';
+        return;
+      }
+      const looksHosted = /\.vercel\.app$|\.vercel\.sh$/i.test(host);
       if (looksHosted) {
         this.cloudMode = true;
         return;
@@ -433,13 +476,22 @@ function remote() {
     },
     async poll() {
       try {
-        this.st = await (await fetch(this.apiUrl('/api/status'))).json();
-        if (this.st?.bridge?.publicUrl && !this.apiBase) {
-          // utile en local pendant npm run share
+        const s = await (await fetch(this.apiUrl('/api/status'), { headers: this.apiHeaders() })).json();
+        if (s.status === 'ready' && s.mode === 'bluetooth-hid' && !s.host) {
+          try { await this.post('/api/cancel', {}); } catch {}
+          this.st = { status: 'idle', error: null, profile: null };
+          return;
+        }
+        this.st = s;
+        if (this.cloudMode && this.apiBase) {
+          this.bridgeOk = true;
+          if (!this.bridgeStatus) this.bridgeStatus = 'Pont connecté';
         }
       } catch {
         if (this.cloudMode && !this.apiBase) {
           this.st = { status: 'idle', error: null, profile: null };
+        } else if (this.cloudMode && this.apiBase) {
+          this.bridgeOk = false;
         }
       }
     },
@@ -450,7 +502,8 @@ function remote() {
       }
       this.scanning = true;
       try {
-        this.devices = await (await fetch(this.apiUrl('/api/scan'))).json();
+        this.devices = await (await fetch(this.apiUrl('/api/scan'), { headers: this.apiHeaders() })).json();
+        this.btNote = this.devices?.length ? '' : 'Aucune télé trouvée sur le réseau du pont.';
       } catch (e) {
         this.devices = [];
         this.btNote = 'Pont injoignable. Vérifie npm run share et l’URL.';
@@ -466,7 +519,7 @@ function remote() {
       this.scanningBt = true;
       this.btNote = 'Scan Bluetooth…';
       try {
-        const r = await (await fetch(this.apiUrl('/api/bt/scan'))).json();
+        const r = await (await fetch(this.apiUrl('/api/bt/scan'), { headers: this.apiHeaders() })).json();
         this.btNote = r.note || '';
         const list = r.tvs || [];
         const map = new Map(this.devices.map((d) => [d.host || d.btAddress, d]));
@@ -510,7 +563,7 @@ function remote() {
     async post(url, body) {
       return (await fetch(this.apiUrl(url), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.apiHeaders(),
         body: JSON.stringify(body || {}),
       })).json();
     },

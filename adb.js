@@ -107,10 +107,19 @@ const EXTRA_APP_PACKAGES = {
 
 export async function adbConnect(host, port = 5555) {
   const target = `${host}:${port}`;
-  await run(['disconnect', target], { timeout: 4000 });
-  const res = await run(['connect', target]);
-  const text = res.out.toLowerCase();
-  const ok = text.includes('connected to') || text.includes('already connected');
+  await run(['disconnect', target], { timeout: 3000 });
+  const res = await run(['connect', target], { timeout: 8000 });
+  const text = (res.out || res.err || '').toLowerCase();
+  let ok = text.includes('connected to') || text.includes('already connected');
+  if (ok) {
+    // Vérifie que le device n’est pas “offline”
+    const list = await run(['devices'], { timeout: 4000 });
+    const line = (list.out || '').split('\n').find((l) => l.startsWith(target));
+    if (!line || /\soffline\b/.test(line) || !/\sdevice\b/.test(line)) {
+      ok = false;
+      return { ok, target, detail: (list.out || res.out || 'device offline').trim() };
+    }
+  }
   return { ok, target, detail: res.out || res.err };
 }
 
@@ -126,7 +135,13 @@ export async function adbPair(host, port, code) {
 export async function adbKey(host, port, key) {
   const code = ADB_KEYS[key] || key;
   const serial = `${host}:${port}`;
-  return run(['-s', serial, 'shell', 'input', 'keyevent', code], { timeout: 5000 });
+  let res = await run(['-s', serial, 'shell', 'input', 'keyevent', code], { timeout: 5000 });
+  if (!res.ok && /offline|not found|no devices|error: device/i.test(`${res.out} ${res.err}`)) {
+    const c = await adbConnect(host, port);
+    if (!c.ok) return { ok: false, out: c.detail, err: 'TV hors ligne — reconnecte-la au Wi‑Fi / hotspot' };
+    res = await run(['-s', serial, 'shell', 'input', 'keyevent', code], { timeout: 5000 });
+  }
+  return res;
 }
 
 function serialOf(host, port) {

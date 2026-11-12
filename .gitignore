@@ -14,3 +14,6 @@ vendor/*.pkg
 .vscode/
 *.pem
 *.p12
+bin/cloudflared
+bin/*.tgz
+bin/cloudflared.tgz

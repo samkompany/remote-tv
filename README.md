@@ -1,47 +1,32 @@
 # remote-tv
 
-Télécommande web pour Smart TV (Android TV / Google TV, ADB, Roku, Bluetooth).
+Télécommande web pour Smart TV (Android TV / Google TV, ADB, Roku).
 
-## Pourquoi Vercel seul ne trouve pas la télé ?
-
-Le site sur Vercel est dans le **cloud**. La télé est derrière ton **Wi‑Fi (NAT)**.  
-Les deux ont Internet, mais **Internet ne permet pas de “voir” un appareil dans un salon** sans un relais chez toi.
-
-```
-[Navigateur / Vercel] ──HTTPS──► [Pont chez toi] ──Wi‑Fi local──► [Télé]
-```
-
-## Mode en ligne (lien à envoyer)
-
-Sur l’ordinateur **à la maison** (même Wi‑Fi que la télé) :
+## Local (contrôle direct)
 
 ```bash
 npm install
+npm start
+```
+
+Ouvre [http://localhost:3000](http://localhost:3000) — même Wi‑Fi / hotspot que la télé.
+
+## Lien Vercel (envoyer aux autres)
+
+Vercel héberge **l’interface**. La télé reste chez toi → il faut un **pont** :
+
+```bash
 export VERCEL_APP_URL=https://TON-APP.vercel.app
 npm run share
 ```
 
-Le terminal affiche un **lien à envoyer**. Ce lien ouvre l’UI Vercel déjà branchée sur ton pont.
+Le terminal affiche un **lien à envoyer** (`?bridge=https://….trycloudflare.com`).  
+Garde le terminal ouvert pendant les tests.
 
-Sinon, ouvre ton site Vercel et colle l’URL du pont (`https://….loca.lt`) dans le champ prévu.
+Sur Vercel : désactive **Deployment Protection** (Settings → Deployment Protection) sinon le lien demande un login.
 
-## Mode local uniquement
+## Déploiement Vercel
 
-```bash
-npm start
-```
-
-→ [http://localhost:3000](http://localhost:3000)
-
-## Déploiement Vercel (UI)
-
-`vercel.json` sert le dossier `public/`.  
-Le contrôle réel passe toujours par `npm run share` chez la personne qui a la télé.
-
-## Bluetooth accessoire
-
-```bash
-cd native/BtHidBridge && swift build -c release
-```
-
-Puis dans l’UI : activer l’accessoire → appairer la télé.
+1. Import du repo GitHub `samkompany/remote-tv`
+2. Deploy (config dans `vercel.json`)
+3. Copie l’URL → `VERCEL_APP_URL` pour `npm run share`

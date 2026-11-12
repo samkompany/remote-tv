@@ -31,7 +31,7 @@ const app = express();
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Bypass-Tunnel-Reminder, User-Agent');
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
 });
@@ -124,9 +124,15 @@ function probePort(host, port, ms = 2500) {
 
 async function connectAdb(host) {
   const open = await probePort(host, ADB_PORT, 2000);
-  if (!open) return { ok: false, reason: 'closed' };
+  if (!open) {
+    return {
+      ok: false,
+      reason: 'closed',
+      detail: `La télé ${host} ne répond pas (Wi‑Fi/hotspot coupé ?). Reconnecte la télé au même réseau que ce Mac.`,
+    };
+  }
   const res = await adbConnect(host, ADB_PORT);
-  if (!res.ok) return { ok: false, reason: res.detail || 'adb connect failed' };
+  if (!res.ok) return { ok: false, reason: res.detail || 'adb connect failed', detail: res.detail };
   adbTarget = { host, port: ADB_PORT };
   remote = null;
   activeType = 'adb';
@@ -328,16 +334,8 @@ app.post('/api/bt/become-accessory', async (req, res) => {
     bridge.help,
   ].join('\n');
 
-  if (bridge.ok || bridge.status?.classic?.sdp) {
-    activeType = 'bluetooth';
-    state = {
-      ...state,
-      status: 'ready',
-      mode: 'bluetooth-hid',
-      platform: 'Accessoire Bluetooth HID',
-      error: null,
-    };
-  }
+  // Ne passe PAS en "ready" ici : sans appairage Classic réel, les touches ne marchent pas.
+  // Garder ADB / Wi‑Fi si déjà connecté.
   res.json({
     ok: !!bridge.ok,
     tvPairingOpened,
@@ -404,7 +402,7 @@ app.post('/api/connect', async (req, res) => {
     if (preferAdb) {
       const adb = await connectAdb(host);
       if (adb.ok) return;
-      setError(adbHelp(host));
+      setError(adb.detail || adbHelp(host));
       return;
     }
 
@@ -442,6 +440,9 @@ app.post('/api/connect', async (req, res) => {
 
 app.post('/api/cancel', (req, res) => {
   stopRemote();
+  activeType = null;
+  adbTarget = null;
+  tvProfile = null;
   state = { status: 'idle', host: null, error: null, mode: null, platform: null, profile: null };
   res.json(state);
 });
@@ -496,14 +497,32 @@ app.post('/api/code', async (req, res) => {
 app.post('/api/key', async (req, res) => {
   const { key } = req.body;
 
-  // Mode accessoire BT (sans Wi‑Fi) : envoi HID via BtHidBridge
+  // BT uniquement si vraiment appairé (classic.connected). Sinon ADB/Wi‑Fi.
   if (activeType === 'bluetooth' || state.mode === 'bluetooth-hid') {
-    const r = await sendBtHidKey(key);
-    if (!r.ok) return res.status(503).json({ error: r.error || 'Pont Bluetooth inactif — reclique Devenir télécommande Bluetooth' });
-    return res.json({ ok: true, mode: 'bluetooth-hid' });
+    try {
+      const st = await fetch(`http://127.0.0.1:${Number(process.env.BTHID_PORT || 8765)}/status`, {
+        signal: AbortSignal.timeout(600),
+      }).then((r) => r.json()).catch(() => null);
+      if (st?.classic?.connected) {
+        const r = await sendBtHidKey(key);
+        if (!r.ok) return res.status(503).json({ error: r.error || 'Bluetooth inactif' });
+        return res.json({ ok: true, mode: 'bluetooth-hid' });
+      }
+    } catch {}
+    // Appairage BT pas fait → bascule ADB si possible
+    if (!(activeType === 'adb' && adbTarget) && state.host) {
+      const adb = await connectAdb(state.host);
+      if (!adb.ok && !adbTarget) {
+        return res.status(503).json({
+          error: 'Bluetooth non appairé. Reconnecte en ADB (Rechercher → ADB) ou termine l’appairage BT.',
+        });
+      }
+    }
   }
 
-  if (state.status !== 'ready') return res.status(409).json({ error: 'Non connecté' });
+  if (state.status !== 'ready' && !(activeType === 'adb' && adbTarget)) {
+    return res.status(409).json({ error: 'Non connecté' });
+  }
 
   // MENU → vrai menu TV (Image/Son…) pas le KEYCODE générique
   if (key === 'KEYCODE_MENU' || key === 'MENU') {
@@ -663,25 +682,23 @@ async function startPublicTunnel() {
   const wantShare = process.env.SHARE === '1' || process.argv.includes('--share');
   if (!wantShare) return;
   try {
-    const localtunnel = (await import('localtunnel')).default;
-    const tunnel = await localtunnel({ port: PORT });
+    const { openPublicTunnel } = await import('./tunnel.js');
+    const tunnel = await openPublicTunnel(PORT);
     publicTunnelUrl = tunnel.url;
+    const vercel = VERCEL_APP_URL || 'https://TON-APP.vercel.app';
+    const shareLink = `${vercel}?bridge=${encodeURIComponent(publicTunnelUrl)}`;
     console.log('');
-    console.log('══════════════════════════════════════════════');
-    console.log('  PONT PUBLIC (relie Vercel → ta télé chez toi)');
-    console.log('  URL du pont :', publicTunnelUrl);
-    if (VERCEL_APP_URL) {
-      console.log('  Lien à envoyer :', `${VERCEL_APP_URL}?bridge=${encodeURIComponent(publicTunnelUrl)}`);
-    } else {
-      console.log('  Sur Vercel : colle cette URL dans « URL du pont »');
+    console.log('════════════════════════════════════════════════════');
+    console.log('  PONT PUBLIC prêt (' + tunnel.provider + ')');
+    console.log('  1) Garde CE terminal ouvert');
+    console.log('  2) Envoie ce lien aux autres :');
+    console.log('     ' + shareLink);
+    console.log('  Pont technique :', publicTunnelUrl);
+    if (!VERCEL_APP_URL) {
       console.log('  Astuce : export VERCEL_APP_URL=https://ton-app.vercel.app');
     }
-    console.log('══════════════════════════════════════════════');
+    console.log('════════════════════════════════════════════════════');
     console.log('');
-    tunnel.on('close', () => {
-      publicTunnelUrl = null;
-      console.log('Tunnel fermé');
-    });
   } catch (e) {
     console.warn('Tunnel public impossible:', e?.message || e);
   }
